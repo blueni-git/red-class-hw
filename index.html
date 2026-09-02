@@ -46,7 +46,7 @@
       display: flex; align-items: center; gap: 8px; background: #F4F7FE; padding: 8px 14px; border-radius: 14px;
     }
     .date-picker-box label { font-weight: bold; font-size: 14px; color: var(--text-dark); }
-    .date-input { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-weight: bold; font-size: 15px; }
+    .date-input { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-weight: bold; font-size: 15px; background: white; cursor: pointer; }
 
     .nav-btns { display: flex; gap: 10px; flex-wrap: wrap; }
     .nav-btn {
@@ -140,6 +140,7 @@
     <div class="date-picker-box">
       <label>📅 當前選擇日期：</label>
       <input type="date" id="selected-date" class="date-input" onchange="changeDate()">
+      <button class="btn btn-outline" style="padding: 6px 10px; font-size: 12px;" onclick="resetToToday()">回到今天</button>
     </div>
 
     <div class="nav-btns">
@@ -276,11 +277,20 @@
 
     const avatars = ["🐶","🐱","🦁","🐰","🐻","🦊","🐼","🐨","🐯","🐮","🐷","🐸","🐵","🐔","🐧","🦄","🦉","🐬","🦋","🐝","🐙","🦩","🦔","🐿️","🦥","🦦","🦘","🦡","🦚","🦜","🐢","🦆","🐋"];
 
-    let currentDateStr = new Date().toISOString().split('T')[0];
+    // 取得當前本地 YYYY-MM-DD 格式
+    function getTodayFormatted() {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    let currentDateStr = getTodayFormatted();
     let students = [...defaultStudents];
     let subjects = ["國語習作", "數學習作", "英語單字"];
-    let historyData = {}; // 格式: { '2026-09-01': { studentId: { subject: 'done'|'missing'|'makeup'|'late' } } }
-    let logs = []; // 歷史履歷明細
+    let historyData = {}; // 格式: { '2026-09-03': { studentId: { subject: 'done'|'missing'|'makeup'|'late' } } }
+    let logs = [];
     let activeStudentForReport = null;
     let dbRef = null;
 
@@ -342,6 +352,12 @@
       render();
     }
 
+    function resetToToday() {
+      currentDateStr = getTodayFormatted();
+      document.getElementById('selected-date').value = currentDateStr;
+      render();
+    }
+
     // 狀態切換：done ➔ missing ➔ makeup ➔ late ➔ done
     function cycleStatus(studentId, subject) {
       if (!historyData[currentDateStr]) historyData[currentDateStr] = {};
@@ -357,15 +373,13 @@
 
       historyData[currentDateStr][studentId][subject] = nextStatus;
 
-      // 紀錄到履歷 Log
+      // 紀錄履歷
       const s = students.find(item => item.id === studentId);
-      const todayStr = new Date().toISOString().split('T')[0];
-      
       logs.unshift({
         studentId: studentId,
         studentName: s.name,
         date: currentDateStr,
-        actionDate: todayStr,
+        actionDate: getTodayFormatted(),
         subject: subject,
         status: nextStatus
       });
@@ -389,7 +403,6 @@
       const modalBody = document.getElementById('modal-records-body');
       modalBody.innerHTML = '';
 
-      // 搜尋該學生的所有特別狀態紀錄 (missing, makeup, late)
       let studentLogs = [];
       Object.keys(historyData).forEach(date => {
         const dayData = historyData[date][studentId];
