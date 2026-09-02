@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>班級功課追蹤與大冒險系統</title>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  
+  <style>
+    :root {
+      --bg: #F0F4F8;
+      --card-bg: #FFFFFF;
+      --primary: #4318FF;
+      --danger: #EE5D50;
+      --danger-bg: #FDE8E8;
+      --success: #01B574;
+      --success-bg: #E6F7F0;
+      --warning: #FFB800;
+      --text-dark: #1B2559;
+      --text-gray: #A3AED0;
+      --border: #E9EDF7;
+    }
+
+    * { box-sizing: border-box; font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; margin: 0; padding: 0; }
+    body { background-color: var(--bg); color: var(--text-dark); padding: 20px; }
+
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      background: var(--card-bg); padding: 16px 28px; border-radius: 20px;
+      margin-bottom: 24px; box-shadow: 0 4px 18px rgba(0,0,0,0.03); flex-wrap: wrap; gap: 15px;
+    }
+    .header-title { display: flex; align-items: center; gap: 12px; }
+    .header-title h1 { font-size: 26px; color: var(--primary); }
+    .sync-status {
+      font-size: 13px; padding: 6px 12px; border-radius: 20px; font-weight: bold; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .sync-status.online { background: var(--success-bg); color: var(--success); }
+    .sync-status.offline { background: #FFF4E5; color: var(--warning); }
+
+    .nav-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+    .nav-btn {
+      border: none; padding: 12px 20px; border-radius: 14px; font-size: 15px; font-weight: bold;
+      cursor: pointer; transition: all 0.2s; background: #F4F7FE; color: var(--text-dark);
+    }
+    .nav-btn.active { background: var(--primary); color: white; box-shadow: 0 4px 12px rgba(67,24,255,0.3); }
+
+    .view-panel { display: none; }
+    .view-panel.active { display: block; }
+
+    .card { background: var(--card-bg); padding: 24px; border-radius: 20px; box-shadow: 0 4px 18px rgba(0,0,0,0.03); margin-bottom: 20px; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+    .btn { padding: 10px 18px; border-radius: 12px; font-weight: bold; border: none; cursor: pointer; transition: 0.2s; font-size: 14px; }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-outline { background: transparent; border: 2px solid var(--border); color: var(--text-dark); }
+    .btn-danger { background: var(--danger-bg); color: var(--danger); }
+
+    .table-responsive { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 650px; }
+    th, td { padding: 16px; text-align: center; border-bottom: 1px solid var(--border); font-size: 17px; }
+    th { background-color: #FAFCFE; color: var(--text-gray); font-weight: bold; }
+    
+    .status-toggle {
+      padding: 10px 20px; border-radius: 12px; border: none; font-size: 16px; font-weight: bold;
+      cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px;
+    }
+    .status-toggle.done { background: var(--success-bg); color: var(--success); }
+    .status-toggle.missing { background: var(--danger-bg); color: var(--danger); }
+
+    .kids-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+    .student-card {
+      background: var(--card-bg); border-radius: 24px; padding: 24px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 3px solid transparent; transition: all 0.3s;
+    }
+    .student-card.has-missing { border-color: var(--danger); background: #FFF9F9; }
+    .student-card.all-done { border-color: var(--success); background: #F4FBF7; }
+    
+    .student-header { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+    .student-avatar {
+      font-size: 40px; background: #E9EDF7; width: 68px; height: 68px;
+      display: flex; align-items: center; justify-content: center; border-radius: 50%; flex-shrink: 0;
+    }
+    .student-name { font-size: 22px; font-weight: 800; color: var(--text-dark); }
+    
+    .hw-badge-list { display: flex; flex-direction: column; gap: 10px; }
+    .hw-badge {
+      padding: 12px 18px; border-radius: 16px; font-size: 18px; font-weight: bold;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .hw-badge.missing { background: var(--danger); color: white; box-shadow: 0 4px 12px rgba(238,93,80,0.3); }
+    .all-clear-badge {
+      background: var(--success-bg); color: var(--success); padding: 16px; border-radius: 16px;
+      font-size: 20px; font-weight: bold; text-align: center;
+    }
+
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; margin-bottom: 6px; font-weight: bold; }
+    .form-control { width: 100%; padding: 10px 14px; border: 2px solid var(--border); border-radius: 10px; font-size: 16px; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-title">
+      <h1>🚀 班級功課追蹤大冒險</h1>
+      <span id="sync-indicator" class="sync-status offline">● 連線中...</span>
+    </div>
+    <div class="nav-btns">
+      <button class="nav-btn active" onclick="switchTab('check', event)">📝 每日登記</button>
+      <button class="nav-btn" onclick="switchTab('kids', event)">📺 兒童投影大畫面</button>
+      <button class="nav-btn" onclick="switchTab('settings', event)">⚙️ 功課與名單設定</button>
+    </div>
+  </header>
+
+  <!-- 1. 每日登記面板 -->
+  <div id="check-panel" class="view-panel active">
+    <div class="card">
+      <div class="toolbar">
+        <h2>🗓️ 本日功課繳交勾選表</h2>
+        <div>
+          <button class="btn btn-outline" onclick="resetTodayData()">🔄 重設當日數據</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table>
+          <thead id="tracker-thead"></thead>
+          <tbody id="tracker-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. 兒童大畫面投影面板 -->
+  <div id="kids-panel" class="view-panel">
+    <div class="kids-grid" id="kids-grid-container"></div>
+  </div>
+
+  <!-- 3. 名單與作業設定面板 -->
+  <div id="settings-panel" class="view-panel">
+    <div class="card">
+      <h2>📚 1. 設定今日功課項目（以逗點分隔）</h2>
+      <p style="color:var(--text-gray); margin-bottom:12px;">您可以隨時修改今天的作業名稱，例如：國語習作, 數學習作, 英文單字</p>
+      <div style="display:flex; gap:10px; max-width:600px;">
+        <input type="text" id="subjects-input" class="form-control" placeholder="輸入作業名稱，用逗點分開">
+        <button class="btn btn-primary" onclick="saveSubjects()">儲存功課項目</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>👥 2. 編輯學生名單</h2>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:15px;">
+        <input type="number" id="new-id" class="form-control" placeholder="座號 (例如: 1)">
+        <input type="text" id="new-name" class="form-control" placeholder="學生姓名">
+        <button class="btn btn-primary" onclick="addStudent()">新增學生</button>
+      </div>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>座號</th>
+              <th>姓名</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="settings-students-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyDummyKeyForYourProject",
+      authDomain: "red-class-hw.firebaseapp.com",
+      databaseURL: "https://red-class-hw-default-rtdb.firebaseio.com",
+      projectId: "red-class-hw",
+      storageBucket: "red-class-hw.appspot.com",
+      messagingSenderId: "342631051692",
+      appId: "1:342631051692:web:2afad5465748e2d6f60a09"
+    };
+
+    // 您的 33 位學生名單寫入預設值
+    const defaultStudents = [
+      { id: 1, name: "陳乾樂", avatar: "🐶" }, { id: 2, name: "林軒毅", avatar: "🐱" },
+      { id: 3, name: "張絢掄", avatar: "🦁" }, { id: 4, name: "古子昕", avatar: "🐰" },
+      { id: 5, name: "林宥旭", avatar: "🐻" }, { id: 6, name: "劉子禔", avatar: "🦊" },
+      { id: 7, name: "林哲立", avatar: "🐼" }, { id: 8, name: "劉宜諺", avatar: "🐨" },
+      { id: 9, name: "蔡立宸", avatar: "🐯" }, { id: 10, name: "陳宏曄", avatar: "🐮" },
+      { id: 11, name: "蔡孟軒", avatar: "🐷" }, { id: 12, name: "張廷翊", avatar: "🐸" },
+      { id: 13, name: "謝佳宸", avatar: "🐵" }, { id: 14, name: "林子耘", avatar: "🐔" },
+      { id: 15, name: "林方琦", avatar: "🐧" }, { id: 20, name: "曾卉妤", avatar: "🦄" },
+      { id: 21, name: "林侑蕾", avatar: "🦉" }, { id: 22, name: "蔡閔晴", avatar: "🐬" },
+      { id: 23, name: "鍾蓉美", avatar: "🦋" }, { id: 24, name: "張宸瑄", avatar: "🐝" },
+      { id: 25, name: "賴稚庭", avatar: "🐙" }, { id: 26, name: "呂亭臻", avatar: "🦩" },
+      { id: 27, name: "呂亮臻", avatar: "🦔" }, { id: 28, name: "陳莠雅", avatar: "🐿️" },
+      { id: 29, name: "許芮瑀", avatar: "🦥" }, { id: 30, name: "楊淞晴", avatar: "🦦" },
+      { id: 31, name: "邱詠昕", avatar: "🦘" }, { id: 32, name: "甘茲寧", avatar: "🦡" },
+      { id: 33, name: "吳品婕", avatar: "🦚" }, { id: 34, name: "王苡菲", avatar: "🦜" },
+      { id: 35, name: "林品妍", avatar: "🐢" }, { id: 36, name: "邱楀童", avatar: "🦆" },
+      { id: 37, name: "許綵芙", avatar: "🐋" }
+    ];
+
+    const avatars = ["🐶","🐱","🦁","🐰","🐻","🦊","🐼","🐨","🐯","🐮","🐷","🐸","🐵","🐔","🐧","🦄","🦉","🐬","🦋","🐝","🐙","🦩","🦔","🐿️","🦥","🦦","🦘","🦡","🦚","🦜","🐢","🦆","🐋"];
+
+    let students = [...defaultStudents];
+    let subjects = ["國語習作", "數學習作", "英語單字"];
+    let dailyData = {};
+    let dbRef = null;
+
+    function init() {
+      render(); // 開啟時先直接渲染一次學生名單（確保不會空白）
+      setupFirebase(firebaseConfig);
+    }
+
+    function setupFirebase(config) {
+      if (typeof firebase !== 'undefined' && !firebase.apps.length) {
+        firebase.initializeApp(config);
+        const db = firebase.database();
+        dbRef = db.ref('class_hw_v3');
+
+        dbRef.on('value', (snapshot) => {
+          const val = snapshot.val();
+          if (val && val.students && val.students.length > 0) {
+            students = val.students;
+            subjects = val.subjects || ["國語習作", "數學習作", "英語單字"];
+            dailyData = val.dailyData || {};
+          } else {
+            // 如果雲端尚無資料，寫入預設 33 位學生
+            saveAllToCloud();
+          }
+          render();
+          updateSyncStatus(true);
+        }, () => {
+          updateSyncStatus(false);
+          render();
+        });
+      }
+    }
+
+    function updateSyncStatus(isOnline) {
+      const el = document.getElementById('sync-indicator');
+      if (isOnline) {
+        el.className = "sync-status online";
+        el.innerHTML = "● 雲端即時同步中";
+      } else {
+        el.className = "sync-status offline";
+        el.innerHTML = "● 單機暫存模式";
+      }
+    }
+
+    function saveAllToCloud() {
+      if (dbRef) {
+        dbRef.set({
+          students: students,
+          subjects: subjects,
+          dailyData: dailyData
+        });
+      }
+    }
+
+    function toggleStatus(studentId, subject) {
+      if (!dailyData[studentId]) dailyData[studentId] = {};
+      dailyData[studentId][subject] = !dailyData[studentId][subject];
+      saveAllToCloud();
+    }
+
+    function resetTodayData() {
+      if(confirm("確定要重設今天的繳交狀況嗎？")) {
+        dailyData = {};
+        saveAllToCloud();
+      }
+    }
+
+    function saveSubjects() {
+      const input = document.getElementById('subjects-input').value;
+      if (input.trim()) {
+        subjects = input.split(/[,，]/).map(s => s.trim()).filter(s => s.length > 0);
+        saveAllToCloud();
+        alert("功課項目已更新！");
+      }
+    }
+
+    function addStudent() {
+      const id = parseInt(document.getElementById('new-id').value);
+      const name = document.getElementById('new-name').value.trim();
+      if (id && name) {
+        const randAvatar = avatars[Math.floor(Math.random() * avatars.length)];
+        students.push({ id, name, avatar: randAvatar });
+        students.sort((a,b) => a.id - b.id);
+        document.getElementById('new-id').value = '';
+        document.getElementById('new-name').value = '';
+        saveAllToCloud();
+      }
+    }
+
+    function removeStudent(id) {
+      if(confirm("確定要刪除這位學生嗎？")) {
+        students = students.filter(s => s.id !== id);
+        saveAllToCloud();
+      }
+    }
+
+    function switchTab(tabName, evt) {
+      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.view-panel').forEach(panel => panel.classList.remove('active'));
+      
+      if(evt) evt.target.classList.add('active');
+      document.getElementById(`${tabName}-panel`).classList.add('active');
+    }
+
+    function render() {
+      // 填入功課設定框
+      document.getElementById('subjects-input').value = subjects.join(', ');
+
+      // 1. 登記表表頭
+      const thead = document.getElementById('tracker-thead');
+      let thHtml = `<tr><th style="width: 25%;">座號 / 學生姓名</th>`;
+      subjects.forEach(sub => {
+        thHtml += `<th>📝 ${sub}</th>`;
+      });
+      thHtml += `<th>今日狀態</th></tr>`;
+      thead.innerHTML = thHtml;
+
+      // 1. 登記表內容
+      const tbody = document.getElementById('tracker-tbody');
+      tbody.innerHTML = '';
+      students.forEach(s => {
+        const sData = dailyData[s.id] || {};
+        let rowHtml = `<tr><td><strong>${s.id}號 ${s.avatar} ${s.name}</strong></td>`;
+        let allDone = true;
+
+        subjects.forEach(sub => {
+          const isDone = sData[sub] !== false; // 預設皆為已繳交
+          if(!isDone) allDone = false;
+          rowHtml += `<td>
+            <button class="status-toggle ${isDone ? 'done' : 'missing'}" onclick="toggleStatus(${s.id}, '${sub}')">
+              ${isDone ? '✅ 已繳交' : '❌ 未繳交'}
+            </button>
+          </td>`;
+        });
+
+        rowHtml += `<td>${allDone ? '<span style="color:var(--success); font-weight:bold;">🌟 完全繳清</span>' : '<span style="color:var(--danger); font-weight:bold;">⚠️ 缺交中</span>'}</td></tr>`;
+        tbody.innerHTML += rowHtml;
+      });
+
+      // 2. 兒童大畫面
+      const kidsContainer = document.getElementById('kids-grid-container');
+      kidsContainer.innerHTML = '';
+      students.forEach(s => {
+        const sData = dailyData[s.id] || {};
+        const missingSubjects = subjects.filter(sub => sData[sub] === false);
+        const hasMissing = missingSubjects.length > 0;
+
+        let badgesHtml = '';
+        if (hasMissing) {
+          missingSubjects.forEach(sub => {
+            badgesHtml += `
+              <div class="hw-badge missing">
+                <span>📝 ${sub}</span>
+                <span>未繳交</span>
+              </div>`;
+          });
+        } else {
+          badgesHtml = `<div class="all-clear-badge">🌟 功課全數完成！讚！</div>`;
+        }
+
+        kidsContainer.innerHTML += `
+          <div class="student-card ${hasMissing ? 'has-missing' : 'all-done'}">
+            <div class="student-header">
+              <div class="student-avatar">${s.avatar}</div>
+              <div class="student-name">${s.id}號 ${s.name}</div>
+            </div>
+            <div class="hw-badge-list">${badgesHtml}</div>
+          </div>
+        `;
+      });
+
+      // 3. 設定頁面學生列表
+      const settingsTbody = document.getElementById('settings-students-tbody');
+      settingsTbody.innerHTML = '';
+      students.forEach(s => {
+        settingsTbody.innerHTML += `
+          <tr>
+            <td>${s.id}號</td>
+            <td>${s.avatar} ${s.name}</td>
+            <td><button class="btn btn-danger" onclick="removeStudent(${s.id})">刪除</button></td>
+          </tr>
+        `;
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>
