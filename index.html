@@ -16,9 +16,12 @@
       --primary-hover: #3311CC;
       --danger: #EE5D50;
       --danger-bg: #FDE8E8;
+      --warning: #FFB800;
+      --warning-bg: #FFF8E6;
+      --late: #FF8800;
+      --late-bg: #FFEEDD;
       --success: #01B574;
       --success-bg: #E6F7F0;
-      --warning: #FFB800;
       --text-dark: #1B2559;
       --text-gray: #A3AED0;
       --border: #E9EDF7;
@@ -101,6 +104,8 @@
     }
     .status-toggle.done { background: var(--success-bg); color: var(--success); }
     .status-toggle.missing { background: var(--danger-bg); color: var(--danger); }
+    .status-toggle.unsigned { background: var(--warning-bg); color: #D97706; }
+    .status-toggle.late { background: var(--late-bg); color: var(--late); }
     
     /* 批次多選樣式 */
     .batch-checkbox { width: 18px; height: 18px; cursor: pointer; margin-right: 8px; }
@@ -109,13 +114,15 @@
       margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
     }
 
-    /* 2. 兒童投影畫面 (精簡緊湊版，可一次容納多人) */
+    /* 2. 兒童投影畫面 */
     .kids-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
     .student-card {
       background: var(--card-bg); border-radius: 14px; padding: 12px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.04); border: 2px solid transparent; transition: all 0.2s; text-align: center;
     }
     .student-card.has-missing { border-color: var(--danger); background: #FFF8F8; }
+    .student-card.has-unsigned { border-color: var(--warning); background: #FFFDF5; }
+    .student-card.has-late { border-color: var(--late); background: #FFFBF5; }
     .student-card.all-done { border-color: var(--success); background: #F3FAF6; }
     
     .student-header { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px; }
@@ -128,17 +135,21 @@
       display: flex; align-items: center; justify-content: space-between;
     }
     .hw-badge.missing { background: var(--danger); color: white; }
+    .hw-badge.unsigned { background: var(--warning); color: #4A3A00; }
+    .hw-badge.late { background: var(--late); color: white; }
     .all-clear-badge {
       background: var(--success-bg); color: var(--success); padding: 8px; border-radius: 8px;
       font-size: 13px; font-weight: bold;
     }
 
     /* 3. 長期統計 */
-    .stats-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .stats-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
     .stat-card { background: var(--card-bg); padding: 16px; border-radius: 14px; text-align: center; box-shadow: 0 4px 18px rgba(0,0,0,0.03); }
     .stat-card .label { font-size: 13px; color: var(--text-gray); font-weight: bold; }
     .stat-card .value { font-size: 32px; font-weight: 800; color: var(--primary); margin-top: 4px; }
     .stat-card.danger .value { color: var(--danger); }
+    .stat-card.warning .value { color: #D97706; }
+    .stat-card.late .value { color: var(--late); }
 
     .tag-risk { background: var(--danger-bg); color: var(--danger); padding: 4px 8px; border-radius: 12px; font-weight: bold; font-size: 12px; }
     .tag-good { background: var(--success-bg); color: var(--success); padding: 4px 8px; border-radius: 12px; font-weight: bold; font-size: 12px; }
@@ -182,8 +193,8 @@ const firebaseConfig = {
         <h2>🗓️ 本日功課勾選</h2>
         <div class="btn-group">
           <button class="btn btn-primary" onclick="toggleBatchMode()">☑️ <span id="batch-btn-text">開啟多選模式</span></button>
-          <button class="btn btn-success" onclick="selectAllEverything(true)">全班完成</button>
-          <button class="btn btn-outline" onclick="selectAllEverything(false)">全班未完成</button>
+          <button class="btn btn-success" onclick="selectAllEverything('done')">全班完成</button>
+          <button class="btn btn-outline" onclick="selectAllEverything('missing')">全班未完成</button>
         </div>
       </div>
 
@@ -194,8 +205,10 @@ const firebaseConfig = {
           <button class="btn btn-outline" style="padding:2px 8px; font-size:12px; margin-left:8px;" onclick="toggleSelectAllCheckboxes()">全選/反選</button>
         </div>
         <div class="btn-group">
-          <button class="btn btn-success" onclick="applyBatchStatus(true)">將勾選者標為【已繳】</button>
-          <button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger);" onclick="applyBatchStatus(false)">將勾選者標為【未繳】</button>
+          <button class="btn btn-success" onclick="applyBatchStatus('done')">標為【✅ 已完成】</button>
+          <button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger);" onclick="applyBatchStatus('missing')">標為【❌ 未完成】</button>
+          <button class="btn btn-outline" style="color:#D97706; border-color:var(--warning);" onclick="applyBatchStatus('unsigned')">標為【✍️ 未簽名】</button>
+          <button class="btn btn-outline" style="color:var(--late); border-color:var(--late);" onclick="applyBatchStatus('late')">標為【⏰ 遲交】</button>
         </div>
       </div>
 
@@ -231,16 +244,20 @@ const firebaseConfig = {
   <div id="stats-panel" class="view-panel">
     <div class="stats-summary">
       <div class="stat-card">
-        <div class="label">繳交率</div>
+        <div class="label">繳交完成率</div>
         <div class="value" id="stats-rate">0%</div>
       </div>
       <div class="stat-card danger">
-        <div class="label">今日缺交人次</div>
+        <div class="label">今日未完成人次</div>
         <div class="value" id="stats-missing-count">0</div>
       </div>
-      <div class="stat-card">
-        <div class="label">全完成人數</div>
-        <div class="value" id="stats-clear-students">0 / 0</div>
+      <div class="stat-card warning">
+        <div class="label">今日未簽名人次</div>
+        <div class="value" id="stats-unsigned-count">0</div>
+      </div>
+      <div class="stat-card late">
+        <div class="label">今日遲交人次</div>
+        <div class="value" id="stats-late-count">0</div>
       </div>
     </div>
 
@@ -264,7 +281,6 @@ const firebaseConfig = {
   </div>
 
   <script>
-    // 預設班級名單
     const students = [
       { id: 1, name: "王小明", avatar: "🐶", missingHistory: 5 },
       { id: 2, name: "陳小華", avatar: "🐱", missingHistory: 1 },
@@ -280,10 +296,10 @@ const firebaseConfig = {
       { id: 12, name: "謝欣妤", avatar: "🦄", missingHistory: 0 }
     ];
 
-    // 移除英語，僅留國語、數學
     const subjects = ["國語習作", "數學習作"];
     const subjectIcons = { "國語習作": "📖", "數學習作": "✏️" };
 
+    // 狀態定義：done (已完成), missing (未完成), unsigned (未簽名), late (遲交)
     let dailyData = {};
     let dbRef = null;
     let isBatchMode = false;
@@ -291,7 +307,7 @@ const firebaseConfig = {
     function getInitialData() {
       let init = {};
       students.forEach(s => {
-        init[s.id] = { "國語習作": true, "數學習作": false };
+        init[s.id] = { "國語習作": "done", "數學習作": "missing" };
       });
       return init;
     }
@@ -347,9 +363,18 @@ const firebaseConfig = {
       }
     }
 
-    function toggleStatus(studentId, subject) {
+    // 四段切換邏輯：done -> missing -> unsigned -> late -> done
+    function cycleStatus(studentId, subject) {
       if (!dailyData[studentId]) dailyData[studentId] = {};
-      dailyData[studentId][subject] = !dailyData[studentId][subject];
+      const current = dailyData[studentId][subject] || 'done';
+      
+      let next = 'done';
+      if (current === 'done') next = 'missing';
+      else if (current === 'missing') next = 'unsigned';
+      else if (current === 'unsigned') next = 'late';
+      else if (current === 'late') next = 'done';
+
+      dailyData[studentId][subject] = next;
       saveData();
     }
 
@@ -388,16 +413,15 @@ const firebaseConfig = {
       saveData();
     }
 
-    // 單科全選 / 全班全選
     function selectAllForSubject(subject) {
       students.forEach(s => {
         if (!dailyData[s.id]) dailyData[s.id] = {};
-        dailyData[s.id][subject] = true;
+        dailyData[s.id][subject] = 'done';
       });
       saveData();
     }
 
-    function selectAllEverything(status = true) {
+    function selectAllEverything(status = 'done') {
       students.forEach(s => {
         if (!dailyData[s.id]) dailyData[s.id] = {};
         subjects.forEach(sub => dailyData[s.id][sub] = status);
@@ -418,7 +442,9 @@ const firebaseConfig = {
       tbody.innerHTML = '';
       students.forEach(s => {
         const sData = dailyData[s.id] || {};
-        let allDone = true;
+        let hasMissing = false;
+        let hasUnsigned = false;
+        let hasLate = false;
 
         let rowHtml = `<tr>`;
         if (isBatchMode) {
@@ -427,42 +453,71 @@ const firebaseConfig = {
         rowHtml += `<td><strong>${s.avatar} ${s.name}</strong></td>`;
 
         subjects.forEach(sub => {
-          const isDone = sData[sub] !== false;
-          if(!isDone) allDone = false;
+          const status = sData[sub] || 'done';
+          if (status === 'missing') hasMissing = true;
+          if (status === 'unsigned') hasUnsigned = true;
+          if (status === 'late') hasLate = true;
+
+          let btnText = '✅ 已完成';
+          let btnClass = 'done';
+          if (status === 'missing') { btnText = '❌ 未完成'; btnClass = 'missing'; }
+          else if (status === 'unsigned') { btnText = '✍️ 未簽名'; btnClass = 'unsigned'; }
+          else if (status === 'late') { btnText = '⏰ 遲交'; btnClass = 'late'; }
+
           rowHtml += `<td>
-            <button class="status-toggle ${isDone ? 'done' : 'missing'}" onclick="toggleStatus(${s.id}, '${sub}')">
-              ${isDone ? '✅ 已繳' : '❌ 未繳'}
+            <button class="status-toggle ${btnClass}" onclick="cycleStatus(${s.id}, '${sub}')">
+              ${btnText}
             </button>
           </td>`;
         });
 
-        rowHtml += `<td>${allDone ? '<span style="color:var(--success); font-weight:bold;">🌟 完全繳清</span>' : '<span style="color:var(--danger); font-weight:bold;">⚠️ 缺交</span>'}</td></tr>`;
+        let overallText = '<span style="color:var(--success); font-weight:bold;">🌟 完全繳清</span>';
+        if (hasMissing) overallText = '<span style="color:var(--danger); font-weight:bold;">❌ 缺交中</span>';
+        else if (hasUnsigned) overallText = '<span style="color:#D97706; font-weight:bold;">✍️ 待簽名</span>';
+        else if (hasLate) overallText = '<span style="color:var(--late); font-weight:bold;">⏰ 遲交</span>';
+
+        rowHtml += `<td>${overallText}</td></tr>`;
         tbody.innerHTML += rowHtml;
       });
 
-      // 2. 兒童大畫面 (精簡版：放大容量)
+      // 2. 兒童大畫面
       const kidsContainer = document.getElementById('kids-grid-container');
       kidsContainer.innerHTML = '';
       students.forEach(s => {
         const sData = dailyData[s.id] || {};
-        const missingSubjects = subjects.filter(sub => sData[sub] === false);
-        const hasMissing = missingSubjects.length > 0;
-
+        const abnormalSubjects = subjects.filter(sub => sData[sub] && sData[sub] !== 'done');
+        
+        let cardClass = 'all-done';
         let badgesHtml = '';
-        if (hasMissing) {
-          missingSubjects.forEach(sub => {
-            badgesHtml += `
-              <div class="hw-badge missing">
-                <span>${subjectIcons[sub]} ${sub}</span>
-                <span>未繳</span>
-              </div>`;
+
+        if (abnormalSubjects.length > 0) {
+          let hasMissing = false;
+          let hasUnsigned = false;
+          let hasLate = false;
+
+          abnormalSubjects.forEach(sub => {
+            const st = sData[sub];
+            if (st === 'missing') {
+              hasMissing = true;
+              badgesHtml += `<div class="hw-badge missing"><span>${subjectIcons[sub]} ${sub}</span><span>未完成</span></div>`;
+            } else if (st === 'unsigned') {
+              hasUnsigned = true;
+              badgesHtml += `<div class="hw-badge unsigned"><span>${subjectIcons[sub]} ${sub}</span><span>未簽名</span></div>`;
+            } else if (st === 'late') {
+              hasLate = true;
+              badgesHtml += `<div class="hw-badge late"><span>${subjectIcons[sub]} ${sub}</span><span>遲交</span></div>`;
+            }
           });
+
+          if (hasMissing) cardClass = 'has-missing';
+          else if (hasUnsigned) cardClass = 'has-unsigned';
+          else if (hasLate) cardClass = 'has-late';
         } else {
           badgesHtml = `<div class="all-clear-badge">🌟 完成！</div>`;
         }
 
         kidsContainer.innerHTML += `
-          <div class="student-card ${hasMissing ? 'has-missing' : 'all-done'}">
+          <div class="student-card ${cardClass}">
             <div class="student-header">
               <span class="student-avatar">${s.avatar}</span>
               <span class="student-name">${s.name}</span>
@@ -476,22 +531,25 @@ const firebaseConfig = {
       let totalTasks = students.length * subjects.length;
       let completedTasks = 0;
       let missingCount = 0;
-      let clearStudentsCount = 0;
+      let unsignedCount = 0;
+      let lateCount = 0;
 
       students.forEach(s => {
         const sData = dailyData[s.id] || {};
-        let sMissing = 0;
         subjects.forEach(sub => {
-          if (sData[sub] !== false) completedTasks++;
-          else { missingCount++; sMissing++; }
+          const st = sData[sub] || 'done';
+          if (st === 'done') completedTasks++;
+          else if (st === 'missing') missingCount++;
+          else if (st === 'unsigned') unsignedCount++;
+          else if (st === 'late') lateCount++;
         });
-        if (sMissing === 0) clearStudentsCount++;
       });
 
       const rate = Math.round((completedTasks / totalTasks) * 100);
       document.getElementById('stats-rate').innerText = `${rate}%`;
       document.getElementById('stats-missing-count').innerText = missingCount;
-      document.getElementById('stats-clear-students').innerText = `${clearStudentsCount} / ${students.length}`;
+      document.getElementById('stats-unsigned-count').innerText = unsignedCount;
+      document.getElementById('stats-late-count').innerText = lateCount;
 
       const statsTbody = document.getElementById('stats-tbody');
       statsTbody.innerHTML = '';
